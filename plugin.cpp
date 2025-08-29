@@ -5,6 +5,7 @@
 #include "XPLMPlugin.h"
 #include "XPLMUtilities.h"
 #include "XPLMDataAccess.h"
+#include "XPLMMenus.h"
 #include <filesystem>
 #include <vector>
 #include <string>
@@ -54,9 +55,12 @@ static int endCommand(XPLMCommandRef, XPLMCommandPhase phase, void *ref) {
 
 static void removeRegisteredCommands() {
     for (auto *c: commands) {
-        if (c->beginRef) XPLMUnregisterCommandHandler(
-            c->beginRef, beginCommand, 0, c);
-        if (c->endRef) XPLMUnregisterCommandHandler(c->endRef, endCommand, 0, c);
+        if (c->beginRef)
+            XPLMUnregisterCommandHandler(c->beginRef, beginCommand, 0, c);
+        if (c->endRef)
+            XPLMUnregisterCommandHandler(c->endRef, endCommand, 0, c);
+        if (c->pressDR)
+            XPLMUnregisterDataAccessor(c->pressDR);
         delete c;
     }
     commands.clear();
@@ -71,6 +75,7 @@ static std::string getPluginDir() {
 
 static void registerCommands() {
     removeRegisteredCommands();
+    XPLMDebugString("[NVAN] Registering commands...\n");
 
     std::ifstream file((getPluginDir() + "/commands.txt").c_str());
     if (!file.is_open()) {
@@ -125,6 +130,18 @@ static void registerCommands() {
         XPLMRegisterCommandHandler(command->endRef, endCommand, 0, command);
 
         commands.push_back(command);
+        XPLMDebugString("[NVAN] Registered command: ");
+        XPLMDebugString(line.c_str());
+        XPLMDebugString("\n");
+    }
+
+    XPLMDebugString("[NVAN] Finished registering commands!");
+}
+
+
+void menuHandler(void* inMenuRef, void* inItemRef) {
+    if (inItemRef == (void*)1) {
+        registerCommands();
     }
 }
 
@@ -133,6 +150,11 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     strcpy(outName, "NVAN X-Plane Command Aliases");
     strcpy(outSig, "es.nvan.xPlaneCommandAliasesPlugin");
     strcpy(outDesc, "Registers _press/_begin/_end aliases for commands to implement press and hold via UDP");
+
+    XPLMMenuID pluginsMenu = XPLMFindPluginsMenu();
+    int menuItem = XPLMAppendMenuItem(XPLMFindPluginsMenu(), "NVAN Command Aliases", nullptr, 0);
+    XPLMMenuID menu = XPLMCreateMenu("NVAN Command Aliases", pluginsMenu, menuItem, menuHandler, nullptr);
+    XPLMAppendMenuItem(menu, "Reload commands.txt", (void*)1, 0);
     return 1;
 }
 
